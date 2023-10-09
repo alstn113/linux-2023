@@ -7,7 +7,7 @@
 // 단어 비교 함수
 int compareWords(const void *a, const void *b)
 {
-  return strcmp(*(const char **)a, *(const char **)b);
+  return strcasecmp(*(const char **)a, *(const char **)b);
 }
 
 int main(int argc, char *argv[])

@@ -11,15 +11,20 @@ int main()
 
   if (pid > 0)
   {
-    printf("I am the parent of pid=%d!\n", pid);
+    printf("Parent process\n");
+    printf("Parent process ID: %d\n", getpid());
+    printf("Child process ID: %d\n", pid);
   }
   else if (!pid)
   {
-    printf("I am the child\n");
+    printf("Child process\n");
+    printf("Parent process ID: %d\n", getppid());
+    printf("Child process ID: %d\n", getpid());
   }
-  else if (pid == -1)
+  else
   {
     perror("fork");
+    return 1;
   }
 
   return 0;

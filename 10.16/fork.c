@@ -20,7 +20,7 @@ int main()
 
   if (!pid)
   {
-    const char *args[] = {"windlass", NULL};
+    char *args[] = {"windlass", NULL}; // const char -> char 로 변경
     int ret;
 
     ret = execv("/bin/windlass", args);

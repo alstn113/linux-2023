@@ -13,69 +13,95 @@ int compareWords(const void *a, const void *b)
     return strcasecmp(*(const char **)a, *(const char **)b);
 }
 
-void writeToSharedFile(const char *message, FILE *file)
+// outputFile에 단어를 삽입하고 정렬하는 함수
+void insertWordInFile(FILE *outputFile, const char *word)
 {
     // 파일 락 얻기
-    flock(fileno(file), LOCK_EX);
+    flockfile(outputFile);
 
-    // 파일에 쓰기
-    fprintf(file, "%s", message);
-    fflush(file); // 버퍼 비우기
+    // 읽기용과 쓰기용 두 개의 임시 파일 생성
+    FILE *tempReadFile = tmpfile();
+    FILE *tempWriteFile = tmpfile();
 
-    // 파일 락 해제
-    flock(fileno(file), LOCK_UN);
-}
-
-void sortAndWriteToFile(const char *fileName)
-{
-    // 파일 읽기
-    FILE *file = fopen(fileName, "r");
-    if (!file)
+    if (!tempReadFile || !tempWriteFile)
     {
-        perror("입력 파일 열기 실패");
-        exit(1);
+        perror("Failed to create temporary files");
+        funlockfile(outputFile);
+        return;
     }
 
-    // 파일 내용 읽어오기
-    char **words = NULL;
-    char word[MAX_WORD_LENGTH];
-    int numWords = 0;
+    char fileWord[MAX_WORD_LENGTH];
 
-    while (fscanf(file, "%s", word) == 1)
+    // 기존 파일의 내용을 읽어 정렬된 상태로 tempReadFile에 기록
+    while (fscanf(outputFile, "%s", fileWord) == 1)
     {
-        words = realloc(words, (numWords + 1) * sizeof(char *));
-        words[numWords] = strdup(word);
-        numWords++;
+        fprintf(tempReadFile, "%s ", fileWord);
     }
 
-    fclose(file);
+    // tempReadFile에서 단어를 읽어 정렬된 상태로 tempWriteFile에 기록
+    char **words = malloc(MAX_WORD_LENGTH * sizeof(char *));
+    int wordCount = 0;
 
-    // 정렬
-    qsort(words, numWords, sizeof(char *), compareWords);
-
-    // 파일 쓰기
-    file = fopen(fileName, "w");
-    if (!file)
+    fseek(tempReadFile, 0, SEEK_SET);
+    while (fscanf(tempReadFile, "%s", fileWord) == 1)
     {
-        perror("출력 파일 열기 실패");
-        exit(1);
+        words[wordCount++] = strdup(fileWord);
     }
 
-    for (int i = 0; i < numWords; i++)
+    // 새로운 단어를 words 배열에 추가
+    words[wordCount++] = strdup(word);
+
+    // words 배열을 정렬
+    qsort(words, wordCount, sizeof(char *), compareWords);
+
+    // 정렬된 내용을 tempWriteFile에 쓰기
+    for (int i = 0; i < wordCount; i++)
     {
-        fprintf(file, "%s ", words[i]);
+        fprintf(tempWriteFile, "%s ", words[i]);
         free(words[i]);
     }
 
     free(words);
 
-    fclose(file);
+    // Move the content from the tempWriteFile back to the outputFile
+    fseek(tempWriteFile, 0, SEEK_SET);
+    int ch;
+    while ((ch = fgetc(tempWriteFile)) != EOF)
+    {
+        fputc(ch, outputFile);
+    }
+
+    fclose(tempReadFile);
+    fclose(tempWriteFile);
+
+    // 파일 락 해제
+    funlockfile(outputFile);
+}
+
+// 프로세스가 한 파일을 핸들링하는 부분
+void processInputFile(FILE *outputFile, const char *inputFileName)
+{
+    FILE *inputFile = fopen(inputFileName, "r");
+    if (!inputFile)
+    {
+        perror("입력 파일 열기 실패");
+        exit(1);
+    }
+
+    char word[MAX_WORD_LENGTH];
+    while (fscanf(inputFile, "%s", word) == 1)
+    {
+        // 단어를 파일에 삽입하고 정렬하기
+        insertWordInFile(outputFile, word);
+    }
+
+    fclose(inputFile);
 }
 
 int main(int argc, char *argv[])
 {
     // 파일이 없으면 생성
-    FILE *outputFile = fopen(argv[argc - 1], "w");
+    FILE *outputFile = fopen(argv[argc - 1], "w+");
     if (!outputFile)
     {
         perror("출력 파일 열기 실패");
@@ -103,25 +129,10 @@ int main(int argc, char *argv[])
 
             for (int j = start; j < end; j++)
             {
-                FILE *inputFile = fopen(argv[j + 1], "r");
-                if (!inputFile)
-                {
-                    perror("입력 파일 열기 실패");
-                    return 1;
-                }
-
-                char word[MAX_WORD_LENGTH];
-                while (fscanf(inputFile, "%s", word) == 1)
-                {
-                    writeToSharedFile(word, outputFile);
-                }
-
-                fclose(inputFile);
+                processInputFile(outputFile, argv[j + 1]);
             }
 
-            // 파일을 정렬하고 다시 쓰기
-            sortAndWriteToFile(argv[argc - 1]);
-
+            fclose(outputFile);
             exit(0); // 자식 프로세스는 쓰기를 마치고 종료
         }
         else if (child_pid < 0)
@@ -137,7 +148,28 @@ int main(int argc, char *argv[])
         wait(NULL);
     }
 
-    printf("부모 프로세스 종료\n");
+    // oututFile 정렬하기
+    char **words = malloc(MAX_WORD_LENGTH * sizeof(char *));
+    int wordCount = 0;
+
+    fseek(outputFile, 0, SEEK_SET);
+    char fileWord[MAX_WORD_LENGTH];
+    while (fscanf(outputFile, "%s", fileWord) == 1)
+    {
+        words[wordCount++] = strdup(fileWord);
+    }
+
+    qsort(words, wordCount, sizeof(char *), compareWords);
+
+    // 정렬된 내용을 파일에 쓰기
+    fseek(outputFile, 0, SEEK_SET);
+    for (int i = 0; i < wordCount; i++)
+    {
+        fprintf(outputFile, "%s ", words[i]);
+        free(words[i]);
+    }
+
+    free(words);
 
     fclose(outputFile);
 

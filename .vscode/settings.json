@@ -3,6 +3,7 @@
     "stdio.h": "c",
     "errno.h": "c",
     "fcntl.h": "c",
-    "pthread.h": "c"
+    "pthread.h": "c",
+    "file.h": "c"
   }
 }

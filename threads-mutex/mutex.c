@@ -85,12 +85,12 @@ int withdraw(struct account *account, char *name, int amount)
     printf("%s withdraw %d\n", name, amount);
     pthread_mutex_unlock(account->mutex);
 
-    disburse_monet(account->balance);
+    disburse_money(account->balance);
 
     return 0;
 }
 
-int disburse_monet(int balance)
+int disburse_money(int balance)
 {
     printf("Current balance: %d\n", balance);
     return 0;

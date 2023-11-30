@@ -23,7 +23,7 @@ struct thread_info
 
 void *start_thread(void *);
 int withdraw(struct account *, char *, int);
-int disburse_monet(int);
+int disburse_money(int);
 
 int main(void)
 {
